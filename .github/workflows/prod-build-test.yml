@@ -1,0 +1,39 @@
+name: Prod Build Test
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: prod-build-test
+  cancel-in-progress: false
+jobs:
+  prod-build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Create production release tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release:prod
+      - name: Show HEAD tags and release file
+        run: |
+          git tag --points-at HEAD
+          if [ -f public/version.txt ]; then cat public/version.txt; else echo "새 릴리스 없음: 빌드에서 HEAD 태그로 검증합니다."; fi
+      - name: Build production artifact
+        run: npm run build:prod
+      - name: Verify version in built JavaScript
+        run: npm run verify:dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prod-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/
+          if-no-files-found: error
